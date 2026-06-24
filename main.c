@@ -1,46 +1,54 @@
-#include "main.h"
-#include "ModeManager.h"
-#include "Joystick.h"
-#include "USART.h"
-#include "Watchdog.h"
+#include "stm32f4xx_hal.h"
+#include "cmsis_os2.h"
+#include "RTC.h"
+#include "LCD.h"
 #include "Delay.h"
-#include <stdio.h>
 
-// Thread IDs
 osThreadId_t tid_app_main;
-osThreadId_t tid_joystick;
-osThreadId_t tid_usart;
-
-// Thread Attributes
 const osThreadAttr_t app_main_attr = { .name = "app_main", .stack_size = 2048 };
-const osThreadAttr_t joystick_attr = { .name = "joystick", .stack_size = 1024 };
-const osThreadAttr_t usart_attr    = { .name = "usart",    .stack_size = 1024 };
 
 static void SystemClock_Config(void);
-static void Error_Handler(int fallo);
 
-/**
-  * @brief Thread principal de la aplicación
-  */
+#ifdef RTE_CMSIS_RTOS2_RTX5
+uint32_t HAL_GetTick(void) {
+    if (osKernelGetState() == osKernelRunning) return (uint32_t)osKernelGetTickCount();
+    for (uint32_t i = (SystemCoreClock >> 14U); i > 0U; i--) { __NOP(); }
+    return 0;
+}
+#endif
+
 void app_main(void *arg) {
-    ModeManager_Init();
+    char lines[2][21];
+    uint8_t prev_seg = 0;
 
-    // Give RTC time to stabilize after initialization (reduced delay)
-    osDelay(200);
+    GPIO_INIT();
+    LCD_reset();
+    MX_RTC_Init();
 
-    tid_joystick = osThreadNew(Joystick_Thread, NULL, &joystick_attr);
-    tid_usart    = osThreadNew(USART_Thread, NULL, &usart_attr);
+    lcd_clean();
+    sprintf(lines[0], "Test RTC");
+    sprintf(lines[1], "Iniciando...");
+    actualizar(lines);
+    osDelay(500);
 
     while (1) {
-        ModeManager_Process();
-        //reset_Watchdog();
-        osDelay(100); // 10Hz loop
+        uint8_t hh = getHora();
+        uint8_t mm = getMin();
+        uint8_t ss = getSeg();
+
+        if (ss != prev_seg) {
+            lcd_clean();
+            sprintf(lines[0], "Reloj RTC");
+            sprintf(lines[1], "%02d:%02d:%02d", hh, mm, ss);
+            actualizar(lines);
+            prev_seg = ss;
+        }
+
+        osDelay(50);
     }
 }
 
 int main(void) {
-    //if (init_Watchdog() != 0) Error_Handler(2);
-    
     HAL_Init();
     SystemClock_Config();
     SystemCoreClockUpdate();
@@ -80,15 +88,3 @@ static void SystemClock_Config(void) {
     RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
     HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5);
 }
-
-static void Error_Handler(int fallo) {
-    while(1);
-}
-
-#ifdef RTE_CMSIS_RTOS2_RTX5
-uint32_t HAL_GetTick (void) {
-    if (osKernelGetState () == osKernelRunning) return (uint32_t)osKernelGetTickCount();
-    for (uint32_t i = (SystemCoreClock >> 14U); i > 0U; i--) { __NOP(); }
-    return 0; // Simplified for template
-}
-#endif
