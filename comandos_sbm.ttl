@@ -1,0 +1,61 @@
+; Macro de Tera Term para comunicacion SBM 2026 (Version compatible)
+; Permite enviar tramas binarias: SOH CMD LEN Payload EOT
+
+:menu
+inputbox '1. Puesta en hora (15:20:15)\n2. Establecer Referencia (1000)\n3. Solicitar todas las medidas\n4. Borrar medidas\n5. Salir' 'Menu de Comandos SBM'
+
+; Si el usuario pulsa Cancelar o cierra la caja
+if result == -1 end
+
+opcion = inputstr
+
+; Comparacion de strings para determinar la accion
+strcompare opcion '1'
+if result == 0 goto set_time
+
+strcompare opcion '2'
+if result == 0 goto set_lref
+
+strcompare opcion '3'
+if result == 0 goto read_meas
+
+strcompare opcion '4'
+if result == 0 goto clear_meas
+
+strcompare opcion '5'
+if result == 0 end
+
+; Si no es ninguna de las anteriores, volver al menu
+goto menu
+
+; --- COMANDO PUESTA EN HORA [0x20] ---
+:set_time
+inputbox 'Introduce hora (HH:MM:SS)' 'Comando 0x20' '15:20:15'
+if result == -1 goto menu
+payload = inputstr
+strlen payload
+len = result + 4 ; SOH(1) + CMD(1) + LEN(1) + Payload(n) + EOT(1)
+
+send $01 $20 len payload $FE
+goto menu
+
+; --- COMANDO SET LREF [0x25] ---
+:set_lref
+inputbox 'Introduce luminosidad de referencia' 'Comando 0x25' '1000'
+if result == -1 goto menu
+payload = inputstr
+strlen payload
+len = result + 4
+
+send $01 $25 len payload $FE
+goto menu
+
+; --- COMANDO LEER MEDIDAS [0x55] ---
+:read_meas
+send $01 $55 $04 $FE
+goto menu
+
+; --- COMANDO BORRAR MEDIDAS [0x60] ---
+:clear_meas
+send $01 $60 $04 $FE
+goto menu

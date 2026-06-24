@@ -1,0 +1,23 @@
+--cpu Cortex-M3
+".\objects\main.o"
+".\objects\thread.o"
+".\objects\escritura.o"
+".\objects\joystick.o"
+".\objects\lcd.o"
+".\objects\pwm.o"
+".\objects\retardo.o"
+".\objects\rtc.o"
+"..\..\..\..\..\AppData\Local\Arm\Packs\ARM\CMSIS\5.7.0\CMSIS\RTOS\RTX\LIB\ARM\RTX_CM3.lib"
+".\objects\rtx_conf_cm.o"
+".\objects\i2c_lpc17xx.o"
+".\objects\ssp_lpc17xx.o"
+".\objects\uart_lpc17xx.o"
+".\objects\gpdma_lpc17xx.o"
+".\objects\gpio_lpc17xx.o"
+".\objects\pin_lpc17xx.o"
+".\objects\startup_lpc17xx.o"
+".\objects\system_lpc17xx.o"
+--strict --scatter ".\Objects\B3.sct"
+--summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols
+--info sizes --info totals --info unused --info veneers
+--list ".\Listings\B3.map" -o .\Objects\B3.axf
