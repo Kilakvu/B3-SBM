@@ -1,46 +1,67 @@
-#include "main.h"
-#include "ModeManager.h"
-#include "Joystick.h"
+#include "stm32f4xx_hal.h"
+#include "cmsis_os2.h"
 #include "USART.h"
-#include "Watchdog.h"
 #include "Delay.h"
-#include <stdio.h>
+#include <string.h>
 
-// Thread IDs
 osThreadId_t tid_app_main;
-osThreadId_t tid_joystick;
-osThreadId_t tid_usart;
-
-// Thread Attributes
 const osThreadAttr_t app_main_attr = { .name = "app_main", .stack_size = 2048 };
-const osThreadAttr_t joystick_attr = { .name = "joystick", .stack_size = 1024 };
-const osThreadAttr_t usart_attr    = { .name = "usart",    .stack_size = 1024 };
 
 static void SystemClock_Config(void);
-static void Error_Handler(int fallo);
 
-/**
-  * @brief Thread principal de la aplicación
-  */
+#ifdef RTE_CMSIS_RTOS2_RTX5
+uint32_t HAL_GetTick(void) {
+    if (osKernelGetState() == osKernelRunning) return (uint32_t)osKernelGetTickCount();
+    for (uint32_t i = (SystemCoreClock >> 14U); i > 0U; i--) { __NOP(); }
+    return 0;
+}
+#endif
+
+static void ProcessFrame(UART_Frame *frame) {
+    switch (frame->cmd) {
+        case CMD_SET_TIME:
+            USART_SendResponse(RESP_TIME_OK, (const char *)frame->payload);
+            break;
+        case CMD_SET_LREF:
+            USART_SendResponse(RESP_LREF_OK, (const char *)frame->payload);
+            break;
+        case CMD_READ_MEAS:
+            USART_SendResponse(RESP_MEASURE, "OK");
+            break;
+        case CMD_CLEAR_MEAS:
+            USART_SendResponse(RESP_CLEAR_OK, NULL);
+            break;
+        default: {
+            char echo[64];
+            int n = snprintf(echo, sizeof(echo), "ECO: cmd=0x%02X len=%d", frame->cmd, frame->len);
+            if (frame->len > 4) {
+                frame->payload[frame->len - 4] = '\0';
+                snprintf(echo + n, sizeof(echo) - n, " payload=%s", frame->payload);
+            }
+            USART_SendResponse(frame->cmd, echo);
+            break;
+        }
+    }
+}
+
 void app_main(void *arg) {
-    ModeManager_Init();
+    UART_Frame frame;
 
-    // Give RTC time to stabilize after initialization (reduced delay)
-    osDelay(200);
+    init_USART();
 
-    tid_joystick = osThreadNew(Joystick_Thread, NULL, &joystick_attr);
-    tid_usart    = osThreadNew(USART_Thread, NULL, &usart_attr);
+    printf("\r\n=== Test USART Eco ===\r\n");
+    printf("Comandos: SET_TIME(0x20), SET_LREF(0x25), READ_MEAS(0x55), CLEAR_MEAS(0x60)\r\n");
+    printf("Cualquier otro comando hara eco\r\n");
 
     while (1) {
-        ModeManager_Process();
-        //reset_Watchdog();
-        osDelay(100); // 10Hz loop
+        if (USART_GetFrame(&frame)) {
+            ProcessFrame(&frame);
+        }
+        osDelay(10);
     }
 }
 
 int main(void) {
-    //if (init_Watchdog() != 0) Error_Handler(2);
-    
     HAL_Init();
     SystemClock_Config();
     SystemCoreClockUpdate();
@@ -80,15 +101,3 @@ static void SystemClock_Config(void) {
     RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
     HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5);
 }
-
-static void Error_Handler(int fallo) {
-    while(1);
-}
-
-#ifdef RTE_CMSIS_RTOS2_RTX5
-uint32_t HAL_GetTick (void) {
-    if (osKernelGetState () == osKernelRunning) return (uint32_t)osKernelGetTickCount();
-    for (uint32_t i = (SystemCoreClock >> 14U); i > 0U; i--) { __NOP(); }
-    return 0; // Simplified for template
-}
-#endif
