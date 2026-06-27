@@ -16,6 +16,7 @@
 static SystemMode current_mode = MODE_REPOSO;
 static float l_med = 0;
 static uint16_t l_ref = 1500;
+static uint16_t l_ref_system = 1500;
 static uint8_t pwm_val = 50;
 static char buffer_circular[20][64];
 static uint8_t buffer_idx = 0;
@@ -60,12 +61,21 @@ static void ProcessUARTCommands(void) {
                 int h, m, s;
                 if (sscanf((char*)frame.payload, "%d:%d:%d", &h, &m, &s) == 3) {
                     setHora(s, m, h);  // note: setHora(seg, min, hor)
+                    if (current_mode == MODE_PROGRAMACION) {
+                        edit_h = h; edit_m = m; edit_s = s;
+                    }
                     USART_SendResponse(RESP_TIME_OK, (char*)frame.payload);
                 }
                 break;
             }
             case CMD_SET_LREF: {
-                l_ref = atoi((char*)frame.payload);
+                l_ref_system = atoi((char*)frame.payload);
+                l_ref = l_ref_system;
+                if (current_mode == MODE_PROGRAMACION) {
+                    edit_lref = ((l_ref + 50) / 100) * 100;
+                    if (edit_lref < 100) edit_lref = 100;
+                    if (edit_lref > 4000) edit_lref = 4000;
+                }
                 USART_SendResponse(RESP_LREF_OK, (char*)frame.payload);
                 break;
             }
@@ -105,16 +115,16 @@ static void UpdateDisplay(void) {
             break;
 
         case MODE_MANUAL:
-            LCD_DrawBar(2, (uint8_t)(l_med * 32 / 4000));
-            LCD_DrawBar(8, (uint8_t)(l_ref * 32 / 4000));
+            LCD_DrawBar(116, (uint8_t)(l_med * 32 / 4000));
+            LCD_DrawBar(122, (uint8_t)(l_ref * 32 / 4000));
             sprintf(lines[0], "M-PWM: %d%%", pwm_val);
             sprintf(lines[1], "%02d:%02d:%02d", hh, mm, ss);
             actualizar(lines);
             break;
 
         case MODE_AUTO:
-            LCD_DrawBar(2, (uint8_t)(l_med * 32 / 4000));
-            LCD_DrawBar(8, (uint8_t)(l_ref * 32 / 4000));
+            LCD_DrawBar(116, (uint8_t)(l_med * 32 / 4000));
+            LCD_DrawBar(122, (uint8_t)(l_ref * 32 / 4000));
             sprintf(lines[0], "A-PWM: %d%%", pwm_val);
             sprintf(lines[1], "%02d:%02d:%02d", hh, mm, ss);
             actualizar(lines);
@@ -170,6 +180,7 @@ void ModeManager_Process(void) {
                 current_mode = MODE_MANUAL;
                 break;
             case MODE_MANUAL:
+                l_ref = l_ref_system;
                 current_mode = MODE_AUTO;
                 break;
             case MODE_AUTO:
@@ -263,6 +274,7 @@ void ModeManager_Process(void) {
             // 3. Validación (Pulsación corta Center)
             if ((events & JOY_EVENT_CENTER) && !(events & JOY_EVENT_LONG)) {
                 l_ref = edit_lref;
+                l_ref_system = edit_lref;
                 setHora(edit_s, edit_m, edit_h);
             }
             break;
